@@ -183,3 +183,226 @@ The built files will be in the `frontend/dist` directory.
 - **CORS errors**: The backend already has CORS configured to allow all origins
 - **Port already in use**: Change the `APP_PORT` in the `.env` file or stop the process using that port
 
+---
+
+## Jenkins CI/CD Setup
+
+This project includes a Jenkins pipeline for automated building, testing, and deployment.
+
+### Prerequisites
+
+1. **Jenkins** installed and running
+2. **Docker** installed on Jenkins agent
+3. **Kubernetes** cluster access configured
+4. **Docker registry** (Docker Hub, AWS ECR, GCR, etc.)
+
+### Jenkins Configuration
+
+1. **Install Required Plugins** in Jenkins:
+   - Docker Pipeline
+   - Kubernetes CLI Plugin
+   - Credentials Binding Plugin
+
+2. **Configure Credentials** in Jenkins:
+   
+   - **Docker Registry Credentials** (ID: `docker-registry-url`):
+     - Add your Docker registry URL and credentials
+     - Format: `your-registry.com` or `docker.io/username`
+   
+   - **Kubernetes Config** (ID: `kubeconfig`):
+     - Add your Kubernetes kubeconfig file content
+     - This allows Jenkins to deploy to your cluster
+
+3. **Create Jenkins Pipeline**:
+   - Create a new Pipeline job in Jenkins
+   - Point it to your Git repository
+   - Jenkins will automatically detect and use the `Jenkinsfile`
+
+4. **Update Jenkinsfile** (if needed):
+   - Update `DOCKER_REGISTRY` with your registry URL
+   - Update `NAMESPACE` if you want a different namespace
+   - Adjust image tags and build steps as needed
+
+### Running the Pipeline
+
+1. Push code to your repository
+2. Trigger the Jenkins pipeline (manual or via webhook)
+3. The pipeline will:
+   - Build Docker images for API and Frontend
+   - Push images to your registry
+   - Deploy to Kubernetes cluster
+   - Perform health checks
+
+---
+
+## Kubernetes Deployment
+
+### Prerequisites
+
+1. **Kubernetes cluster** (minikube, GKE, EKS, AKS, or on-premise)
+2. **kubectl** configured to access your cluster
+3. **Docker images** built and pushed to a registry
+
+### Setup Steps
+
+1. **Update Image References**:
+   
+   Edit the following files and replace `your-registry` with your actual Docker registry:
+   - `k8s/api-deployment.yaml`
+   - `k8s/frontend-deployment.yaml`
+
+2. **Update Configuration** (if needed):
+   
+   Edit `k8s/configmap.yaml` to adjust:
+   - `DOMAIN`: Your public domain or service URL
+   - `API_QUOTA`: Rate limiting quota
+   - Other environment variables
+
+3. **Configure Secrets** (if needed):
+   
+   Edit `k8s/secret.yaml` to add:
+   - Redis password (if using password-protected Redis)
+   - Other sensitive configuration
+
+4. **Deploy to Kubernetes**:
+
+   ```bash
+   # Create namespace
+   kubectl apply -f k8s/namespace.yaml
+   
+   # Create ConfigMap and Secrets
+   kubectl apply -f k8s/configmap.yaml
+   kubectl apply -f k8s/secret.yaml
+   
+   # Deploy Redis
+   kubectl apply -f k8s/redis-deployment.yaml
+   
+   # Deploy API and Frontend
+   kubectl apply -f k8s/api-deployment.yaml
+   kubectl apply -f k8s/frontend-deployment.yaml
+   
+   # Create Services
+   kubectl apply -f k8s/services.yaml
+   
+   # Optional: Deploy Ingress
+   kubectl apply -f k8s/ingress.yaml
+   ```
+
+5. **Verify Deployment**:
+
+   ```bash
+   # Check pods
+   kubectl get pods -n url-shortener
+   
+   # Check services
+   kubectl get svc -n url-shortener
+   
+   # Check deployments
+   kubectl get deployments -n url-shortener
+   
+   # View logs
+   kubectl logs -f deployment/api -n url-shortener
+   kubectl logs -f deployment/frontend -n url-shortener
+   ```
+
+### Accessing the Application
+
+**Using LoadBalancer (Cloud)**:
+- Services are configured as `LoadBalancer` type
+- Get external IPs:
+  ```bash
+  kubectl get svc -n url-shortener
+  ```
+
+**Using NodePort (On-premise/Minikube)**:
+- Change service type in `k8s/services.yaml` from `LoadBalancer` to `NodePort`
+- Access via: `<node-ip>:<nodeport>`
+
+**Using Ingress**:
+- Update `k8s/ingress.yaml` with your domain names
+- Ensure ingress controller is installed (nginx-ingress, etc.)
+- Access via configured domains
+
+### Scaling
+
+Scale deployments manually:
+
+```bash
+# Scale API
+kubectl scale deployment api --replicas=3 -n url-shortener
+
+# Scale Frontend
+kubectl scale deployment frontend --replicas=3 -n url-shortener
+```
+
+### Updating Deployment
+
+1. **Manual Update**:
+   ```bash
+   # Update image in deployment
+   kubectl set image deployment/api api=your-registry/url-shortener-api:new-tag -n url-shortener
+   kubectl rollout status deployment/api -n url-shortener
+   ```
+
+2. **Via Jenkins Pipeline**:
+   - Push new code
+   - Jenkins will automatically build and deploy
+
+### Monitoring and Debugging
+
+```bash
+# Describe resources
+kubectl describe deployment api -n url-shortener
+kubectl describe pod <pod-name> -n url-shortener
+
+# Get events
+kubectl get events -n url-shortener --sort-by='.lastTimestamp'
+
+# Execute commands in pod
+kubectl exec -it <pod-name> -n url-shortener -- sh
+
+# Port forwarding for local access
+kubectl port-forward svc/api-service 3000:3000 -n url-shortener
+kubectl port-forward svc/frontend-service 8080:80 -n url-shortener
+```
+
+### Cleanup
+
+To remove all resources:
+
+```bash
+kubectl delete namespace url-shortener
+```
+
+---
+
+## Kubernetes Manifests Overview
+
+- `namespace.yaml` - Creates the `url-shortener` namespace
+- `configmap.yaml` - Non-sensitive configuration
+- `secret.yaml` - Sensitive data (passwords, keys)
+- `redis-deployment.yaml` - Redis deployment with persistent storage
+- `api-deployment.yaml` - API backend deployment
+- `frontend-deployment.yaml` - Frontend deployment
+- `services.yaml` - Kubernetes services for all components
+- `ingress.yaml` - Ingress configuration (optional, for external access)
+
+---
+
+## CI/CD Workflow
+
+1. **Developer pushes code** → Git repository
+2. **Jenkins triggers** → Pipeline starts
+3. **Build stage** → Docker images built
+4. **Push stage** → Images pushed to registry
+5. **Deploy stage** → Kubernetes manifests updated and applied
+6. **Health check** → Verify deployment success
+
+---
+
+## Additional Resources
+
+- [Kubernetes Documentation](https://kubernetes.io/docs/)
+- [Jenkins Pipeline Documentation](https://www.jenkins.io/doc/book/pipeline/)
+- [Docker Documentation](https://docs.docker.com/)
+
