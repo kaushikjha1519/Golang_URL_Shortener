@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: url-shortener-config
+  namespace: url-shortener
+data:
+  APP_PORT: ":3000"
+  DB_ADDR: "redis-service:6379"
+  DB_PASS: ""
+  API_QUOTA: "30"
+  DOMAIN: "http://api-service:3000"
+  VITE_API_BASE: "http://api-service:3000"
+
